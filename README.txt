@@ -8,6 +8,10 @@ Two modes, picked automatically:
 - In the level editor test mode it compares your current run to a recorded trail.
 - In online lobbies it compares to your GTR ghost.
 
+Each mode has its own on/off switch in Zeep Settings (or the config file), so you
+can run just the editor delta, just the online delta, or both. Both are on by
+default.
+
 Install
 1. Put DeltaBar.dll into:  Zeepkist\BepInEx\plugins\
    (a DeltaBar subfolder is fine)

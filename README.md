@@ -17,6 +17,10 @@ rules.
   last run or your fastest finished run.
 - **Online lobbies:** compares to your ghost.
 
+Each mode has its own on/off switch in Zeep Settings (or the config file), so you
+can run just the editor delta, just the online delta, or both. Both are on by
+default.
+
 ## Editor: last vs fastest
 
 By default it compares to your last run. Switch to your fastest finished run with

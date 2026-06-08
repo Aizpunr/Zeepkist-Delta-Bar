@@ -35,7 +35,7 @@ namespace DeltaBar
     {
         public const string PluginGuid = "com.aizpun.deltabar";
         public const string PluginName = "Delta Bar";
-        public const string PluginVersion = "0.1.0";
+        public const string PluginVersion = "0.2.0";
 
         private const string GtrGuid = "net.tnrd.zeepkist.gtr";
         private const string GhostPlayerTypeName = "TNRD.Zeepkist.GTR.Ghosting.Playback.GhostPlayer";
@@ -53,6 +53,8 @@ namespace DeltaBar
 
         // Config
         private ConfigEntry<bool> _enabled;
+        private ConfigEntry<bool> _enableOnline;   // show in online lobbies (vs GTR ghost)
+        private ConfigEntry<bool> _enableEditor;   // show in the level editor (vs a trail)
         private ConfigEntry<float> _maxDelta;      // bar saturates at this many seconds
         private ConfigEntry<bool> _debug;
         private ConfigEntry<float> _yNudge;        // fine-tune vertical position (pixels)
@@ -121,7 +123,9 @@ namespace DeltaBar
 
         private void Awake()
         {
-            _enabled = Config.Bind("General", "Enabled", true, "Show the delta bar while racing a GTR ghost.");
+            _enabled = Config.Bind("General", "Enabled", true, "Master switch for the delta bar.");
+            _enableOnline = Config.Bind("Online", "Enabled", true, "Show the delta bar in online lobbies (vs your GTR ghost).");
+            _enableEditor = Config.Bind("Editor", "Enabled", true, "Show the delta bar in the level editor (vs a recorded trail).");
             _maxDelta = Config.Bind("General", "MaxDeltaSeconds", 2f, "Delta (seconds) at which the bar is fully filled.");
             _debug = Config.Bind("General", "Debug", true, "Show a small debug readout (delta, projection distance, times).");
             _yNudge = Config.Bind("General", "VerticalNudge", 0f, "Fine-tune the bar's vertical position in pixels (+ down, - up).");
@@ -171,10 +175,12 @@ namespace DeltaBar
                 float ct;
                 if (TryEditorClock(out ct))
                 {
+                    if (!_enableEditor.Value) { _show = false; return; }
                     if (!CaptureEditorRef()) { _show = false; return; }
                 }
                 else
                 {
+                    if (!_enableOnline.Value) { _status = "online: disabled in settings"; _show = false; return; }
                     if (!EnsureGtr()) { _show = false; return; }
                     CaptureGhostIfChanged();
                     if (!_haveGhost) { _status = "online: waiting for ghost"; _show = false; return; }
