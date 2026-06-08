@@ -32,6 +32,13 @@ instead, set this in BepInEx\config\com.aizpun.deltabar.cfg and relaunch:
 The fastest record clears automatically when you load a different level. You can
 also clear it by hand with the F8 key (rebindable as ClearRecordKey in the config).
 
+Moving the bar
+The bar is registered with the ZeepSDK UI configurator, so you move and resize it
+the same way as the rest of the HUD: open the configurator (its key is in ZeepSDK's
+settings), cycle to the "DeltaBar" element, and drag or scale it. The position is
+saved. By default it sits bottom centre, above the run timer. To go back to the old
+fixed position above the timer, set Movable = false under [Bar] in the config.
+
 Notes
 - A small debug line shows top left. Turn it off with Debug = false in the config.
-- The bar position can be nudged with VerticalNudge in the config.
+- VerticalNudge only applies when Movable is off (fixed timer-anchored position).

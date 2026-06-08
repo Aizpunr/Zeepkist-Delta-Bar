@@ -35,7 +35,7 @@ namespace DeltaBar
     {
         public const string PluginGuid = "com.aizpun.deltabar";
         public const string PluginName = "Delta Bar";
-        public const string PluginVersion = "0.2.0";
+        public const string PluginVersion = "0.3.0";
 
         private const string GtrGuid = "net.tnrd.zeepkist.gtr";
         private const string GhostPlayerTypeName = "TNRD.Zeepkist.GTR.Ghosting.Playback.GhostPlayer";
@@ -57,7 +57,8 @@ namespace DeltaBar
         private ConfigEntry<bool> _enableEditor;   // show in the level editor (vs a trail)
         private ConfigEntry<float> _maxDelta;      // bar saturates at this many seconds
         private ConfigEntry<bool> _debug;
-        private ConfigEntry<float> _yNudge;        // fine-tune vertical position (pixels)
+        private ConfigEntry<float> _yNudge;        // fine-tune vertical position (pixels, timer-anchor fallback only)
+        private ConfigEntry<bool> _useConfigurator; // make the bar movable via ZeepSDK's UI configurator
         private ConfigEntry<EditorReference> _editorRef;
         private ConfigEntry<KeyCode> _clearRecordKey;
         public enum EditorReference { Last, Fastest }
@@ -101,6 +102,15 @@ namespace DeltaBar
         private float _anchorRefindTimer;
         private readonly Vector3[] _corners = new Vector3[4];
 
+        // Movable bar: our own overlay canvas + a named RectTransform registered with
+        // ZeepSDK's UI configurator (UIApi.AddToConfigurator), so the user drags/scales it
+        // with the same tool as the rest of the HUD and the position persists (keyed by the
+        // transform's hierarchy path). Reflected, so ZeepSDK stays a soft dependency.
+        private RectTransform _uiRoot;
+        private bool _uiCreated, _uiRegistered;
+        private float _uiRetry;
+        private MethodInfo _uiApiAddMethod;
+
         // Editor mode: delta vs a LevelEditorTrails recording (no GTR ghost needed).
         private bool _editorResolved, _editorAvailable;
         private PropertyInfo _loadedTrailsProp;          // static TrailManager.LoadedTrails
@@ -128,7 +138,8 @@ namespace DeltaBar
             _enableEditor = Config.Bind("Editor", "Enabled", true, "Show the delta bar in the level editor (vs a recorded trail).");
             _maxDelta = Config.Bind("General", "MaxDeltaSeconds", 2f, "Delta (seconds) at which the bar is fully filled.");
             _debug = Config.Bind("General", "Debug", true, "Show a small debug readout (delta, projection distance, times).");
-            _yNudge = Config.Bind("General", "VerticalNudge", 0f, "Fine-tune the bar's vertical position in pixels (+ down, - up).");
+            _yNudge = Config.Bind("General", "VerticalNudge", 0f, "Fine-tune the bar's vertical position in pixels (+ down, - up). Only used when the configurator is off.");
+            _useConfigurator = Config.Bind("Bar", "Movable", true, "Make the bar movable with the ZeepSDK UI configurator (drag/scale it like the rest of the HUD; position is saved). If off, the bar anchors above the run timer.");
             _editorRef = Config.Bind("Editor", "Reference", EditorReference.Last,
                 "In the level editor: compare vs your Last run, or your Fastest finished run.");
             _clearRecordKey = Config.Bind("Editor", "ClearRecordKey", KeyCode.F8,
@@ -169,6 +180,8 @@ namespace DeltaBar
             {
                 if (_clearRecordKey != null && _clearRecordKey.Value != KeyCode.None
                     && Input.GetKeyDown(_clearRecordKey.Value)) ClearFastestRecord("keybind");
+
+                EnsureConfiguratorRect();   // create + register the movable bar (no-op once done)
 
                 // Editor test run active (a LevelEditorTrails recorder exists) -> editor
                 // mode (reference = a recorded trail). Otherwise online mode (GTR ghost).
@@ -629,31 +642,121 @@ namespace DeltaBar
 
             if (!_show) return;
 
-            float maxD = _maxDelta.Value; if (maxD < 0.1f) maxD = 0.1f;
-            float w = 560f, h = 28.6f, gap = 6f;   // base 280x22, +100% wide, +30% tall
+            Rect box;
+            if (!TryGetBarBox(out box)) return;
+            DrawBar(box);
+        }
 
+        // The bar's screen box (GUI top-left coords). Prefer the configurator-registered
+        // RectTransform (movable + scalable + persisted); fall back to a fixed-size box
+        // above the run timer, then to a bottom-centre default if even that is missing.
+        private bool TryGetBarBox(out Rect box)
+        {
+            box = default(Rect);
+
+            if (_uiRoot != null)
+            {
+                _uiRoot.GetWorldCorners(_corners);        // screen px, origin bottom-left
+                float l = _corners[0].x, r = _corners[2].x;
+                float bottomY = _corners[0].y, topY = _corners[1].y;
+                float w = r - l, h = topY - bottomY;
+                if (w > 1f && h > 1f) { box = new Rect(l, Screen.height - topY, w, h); return true; }
+            }
+
+            // Fallback: build a fixed box where the old timer-anchored bar used to sit.
+            const float bw = 560f, barH = 28.6f, numH = 22f, gap = 6f;
             float cx, lapTopY, barTop;
-            if (TryGetLapTimeAnchor(out cx, out lapTopY)) barTop = lapTopY - gap - h;
+            if (TryGetLapTimeAnchor(out cx, out lapTopY)) barTop = lapTopY - gap - barH;
             else { cx = Screen.width * 0.5f; barTop = Screen.height * 0.12f; }
             barTop += _yNudge.Value;
+            box = new Rect(cx - bw * 0.5f, barTop - numH, bw, barH + numH);
+            return true;
+        }
 
-            float left = cx - w * 0.5f, half = w * 0.5f;
+        // Draw the delta number (top of the box) and the bar (bottom of the box), filling
+        // the given screen box so it tracks the configurator's move/scale.
+        private void DrawBar(Rect box)
+        {
+            float maxD = _maxDelta.Value; if (maxD < 0.1f) maxD = 0.1f;
 
-            DrawRect(new Rect(left, barTop, w, h), new Color(0f, 0f, 0f, 0.55f));
+            float barH = box.height * 0.56f;
+            float barTop = box.yMax - barH;
+            float cx = box.x + box.width * 0.5f;
+            float half = box.width * 0.5f;
+
+            DrawRect(new Rect(box.x, barTop, box.width, barH), new Color(0f, 0f, 0f, 0.55f));
 
             bool ahead = _delta <= 0f;
             float fw = Mathf.Clamp01(Mathf.Abs(_delta) / maxD) * half;
             Color fill = ahead ? new Color(0.15f, 0.85f, 0.25f, 0.9f) : new Color(0.9f, 0.2f, 0.2f, 0.9f);
-            if (ahead) DrawRect(new Rect(cx - fw, barTop, fw, h), fill);
-            else DrawRect(new Rect(cx, barTop, fw, h), fill);
+            if (ahead) DrawRect(new Rect(cx - fw, barTop, fw, barH), fill);
+            else DrawRect(new Rect(cx, barTop, fw, barH), fill);
 
-            DrawRect(new Rect(cx - 1f, barTop - 2f, 2f, h + 4f), Color.white);
+            DrawRect(new Rect(cx - 1f, barTop - 2f, 2f, barH + 4f), Color.white);
 
+            int fs = (int)(box.height * 0.42f); if (fs < 8) fs = 8; if (fs > 48) fs = 48;
+            _numStyle.fontSize = fs;
             string txt = string.Format("{0:+0.00;-0.00;0.00}", _delta);
             Color oc = GUI.color;
             GUI.color = ahead ? new Color(0.6f, 1f, 0.6f) : new Color(1f, 0.6f, 0.6f);
-            GUI.Label(new Rect(left, barTop - 22f, w, 22f), txt, _numStyle);
+            GUI.Label(new Rect(box.x, box.y, box.width, box.height - barH), txt, _numStyle);
             GUI.color = oc;
+        }
+
+        // Create our overlay canvas + a stable-named RectTransform once, then register it
+        // with ZeepSDK's UI configurator (retried until ZeepSDK is up). Default position is
+        // a bottom-centre box, so the bar is visible even before the user moves it and
+        // regardless of where the rest of the HUD was relocated.
+        private void EnsureConfiguratorRect()
+        {
+            if (_useConfigurator == null || !_useConfigurator.Value) return;
+
+            if (!_uiCreated)
+            {
+                GameObject canvasGo = new GameObject("DeltaBarCanvas");
+                UnityEngine.Object.DontDestroyOnLoad(canvasGo);
+                Canvas canvas = canvasGo.AddComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                canvas.sortingOrder = 30000;
+
+                GameObject barGo = new GameObject("DeltaBar", new Type[] { typeof(RectTransform) });
+                barGo.transform.SetParent(canvasGo.transform, false);
+                RectTransform rt = (RectTransform)barGo.transform;
+                rt.anchorMin = new Vector2(0.36f, 0.075f);    // bottom-centre default box
+                rt.anchorMax = new Vector2(0.64f, 0.135f);
+                rt.offsetMin = Vector2.zero;
+                rt.offsetMax = Vector2.zero;
+                _uiRoot = rt;
+                _uiCreated = true;
+            }
+
+            if (!_uiRegistered)
+            {
+                _uiRetry += Time.deltaTime;
+                if (_uiRetry < 0.5f) return;
+                _uiRetry = 0f;
+                try
+                {
+                    if (_uiApiAddMethod == null)
+                    {
+                        Assembly z = null;
+                        Assembly[] asms = AppDomain.CurrentDomain.GetAssemblies();
+                        for (int i = 0; i < asms.Length; i++)
+                        {
+                            Type t = null; try { t = asms[i].GetType("ZeepSDK.UI.UIApi"); } catch { }
+                            if (t != null) { z = asms[i]; break; }
+                        }
+                        if (z == null) return;             // ZeepSDK not present yet -> retry / soft-skip
+                        _uiApiAddMethod = z.GetType("ZeepSDK.UI.UIApi")
+                            .GetMethod("AddToConfigurator", new Type[] { typeof(RectTransform) });
+                    }
+                    if (_uiApiAddMethod == null) { _uiRegistered = true; return; } // API shape changed -> stop trying
+                    _uiApiAddMethod.Invoke(null, new object[] { _uiRoot });
+                    _uiRegistered = true;
+                    Logger.LogInfo("Delta Bar: registered with ZeepSDK UI configurator (bar is movable).");
+                }
+                catch (Exception e) { Logger.LogWarning("DeltaBar: configurator register retry: " + e.Message); }
+            }
         }
 
         // Anchor over Zeepkist's bottom-centre run timer. The HUD has several time

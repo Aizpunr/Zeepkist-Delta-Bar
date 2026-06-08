@@ -34,6 +34,14 @@ Reference = Fastest
 The fastest record clears automatically when you load a different level, and you
 can clear it by hand with the `F8` key (rebindable as `ClearRecordKey`).
 
+## Moving the bar
+
+The bar is registered with the ZeepSDK UI configurator, so you move and resize it
+the same way as the rest of the HUD: open the configurator (its key is set in
+ZeepSDK's settings), cycle to the `DeltaBar` element, and drag or scale it. The
+position is saved. By default it sits bottom centre, above the run timer. Set
+`Movable = false` under `[Bar]` to go back to the old fixed timer-anchored spot.
+
 ## Dependencies
 
 - [Level Editor Trails](https://mod.io/g/zeepkist/m/level-editor-trails) records

@@ -27,6 +27,7 @@ if not exist bin mkdir bin
   -reference:"%MANAGED%\UnityEngine.CoreModule.dll" ^
   -reference:"%MANAGED%\UnityEngine.IMGUIModule.dll" ^
   -reference:"%MANAGED%\UnityEngine.InputLegacyModule.dll" ^
+  -reference:"%MANAGED%\UnityEngine.UIModule.dll" ^
   -reference:"%MANAGED%\UnityEngine.TextRenderingModule.dll" ^
   -reference:"%MANAGED%\ZeepkistNetworking.dll" ^
   -reference:"%MANAGED%\Zeepkist.dll" ^
