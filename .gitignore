@@ -1,0 +1,10 @@
+bin/
+obj/
+*.dll
+*.pdb
+*.mdb
+*.user
+.vs/
+.vscode/
+*.zip
+*.cfg
