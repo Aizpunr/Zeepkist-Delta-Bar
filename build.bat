@@ -31,6 +31,7 @@ if not exist bin mkdir bin
   -reference:"%MANAGED%\UnityEngine.TextRenderingModule.dll" ^
   -reference:"%MANAGED%\ZeepkistNetworking.dll" ^
   -reference:"%MANAGED%\Zeepkist.dll" ^
+  -reference:"%MANAGED%\Facepunch.Steamworks.dll" ^
   -optimize ^
   src\Plugin.cs
 

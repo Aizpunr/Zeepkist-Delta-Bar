@@ -35,7 +35,7 @@ namespace DeltaBar
     {
         public const string PluginGuid = "com.aizpun.deltabar";
         public const string PluginName = "Delta Bar";
-        public const string PluginVersion = "0.4.0";
+        public const string PluginVersion = "0.5.0";
 
         private const string GtrGuid = "net.tnrd.zeepkist.gtr";
         private const string GhostPlayerTypeName = "TNRD.Zeepkist.GTR.Ghosting.Playback.GhostPlayer";
@@ -61,7 +61,9 @@ namespace DeltaBar
         private ConfigEntry<bool> _useConfigurator; // make the bar movable via ZeepSDK's UI configurator
         private ConfigEntry<EditorReference> _editorRef;
         private ConfigEntry<KeyCode> _clearRecordKey;
+        private ConfigEntry<GhostChoice> _ghostChoice;   // free play: which GTR ghost to race
         public enum EditorReference { Last, Fastest }
+        public enum GhostChoice { PersonalBest, WorldRecord }
 
         // GTR reflection handles
         private object _ghostPlayer;
@@ -135,6 +137,7 @@ namespace DeltaBar
         {
             _enabled = Config.Bind("General", "Enabled", true, "Master switch for the delta bar.");
             _enableFreePlay = Config.Bind("Free Play", "Enabled", true, "Show the delta bar in free play and time trial (vs your GTR ghost). It is always disabled in online lobbies for competitive fairness, the same way GTR only shows ghosts outside lobbies.");
+            _ghostChoice = Config.Bind("Free Play", "Ghost", GhostChoice.PersonalBest, "Which ghost to race against in free play: your Personal Best, or the World Record (the all-time #1). Load that ghost in GTR for the delta to appear.");
             _enableEditor = Config.Bind("Editor", "Enabled", true, "Show the delta bar in the level editor (vs a recorded trail).");
             _maxDelta = Config.Bind("General", "MaxDeltaSeconds", 2f, "Delta (seconds) at which the bar is fully filled.");
             _debug = Config.Bind("General", "Debug", true, "Show a small debug readout (delta, projection distance, times).");
@@ -142,8 +145,8 @@ namespace DeltaBar
             _useConfigurator = Config.Bind("Bar", "Movable", true, "Make the bar movable with the ZeepSDK UI configurator (drag/scale it like the rest of the HUD; position is saved). If off, the bar anchors above the run timer.");
             _editorRef = Config.Bind("Editor", "Reference", EditorReference.Last,
                 "In the level editor: compare vs your Last run, or your Fastest finished run.");
-            _clearRecordKey = Config.Bind("Editor", "ClearRecordKey", KeyCode.F8,
-                "Key to clear the saved Fastest editor record. It also auto-clears when you load a different level.");
+            _clearRecordKey = Config.Bind("Editor", "ClearRecordKey", KeyCode.None,
+                "Optional key to clear the saved Fastest editor record. Unbound by default (the record already auto-clears when you load a different level); bind a key here if you also want a manual clear.");
             Instance = this;
             SetupFinishHook();
             Logger.LogInfo(string.Format("{0} {1} loaded (Phase 1).", PluginName, PluginVersion));
@@ -483,25 +486,43 @@ namespace DeltaBar
 
         // ---- Ghost capture --------------------------------------------------
 
+        // Pick a ghost out of GTR's loaded set per the Free Play "Ghost" setting:
+        // World Record = the Global-leaderboard ghost (all-time #1); Personal Best = the
+        // ghost owned by the local Steam account. If the chosen one isn't loaded, fall back
+        // to the first loaded ghost so the bar still shows (debug line marks which it is).
         private void CaptureGhostIfChanged()
         {
             IEnumerable gds = _activeGhostsProp != null
                 ? _activeGhostsProp.GetValue(_ghostPlayer, null) as IEnumerable : null;
 
-            object chosenGhost = null; string type = "?";
+            object chosenGhost = null; string chosenLabel = "?";
             if (gds != null)
             {
+                ulong me = LocalSteamId();
+                bool wantWr = _ghostChoice != null && _ghostChoice.Value == GhostChoice.WorldRecord;
+                object firstGhost = null; string firstLabel = "?";
+                object prefGhost = null; string prefLabel = "?";
+
                 foreach (object gd in gds)
                 {
                     if (gd == null) continue;
                     if (_ghostDataGhostProp == null) _ghostDataGhostProp = gd.GetType().GetProperty("Ghost", AllInstance);
                     object g = _ghostDataGhostProp != null ? _ghostDataGhostProp.GetValue(gd, null) : null;
                     if (g == null) continue;
-                    chosenGhost = g;
                     if (_ghostDataTypeProp == null) _ghostDataTypeProp = gd.GetType().GetProperty("Type", AllInstance);
-                    if (_ghostDataTypeProp != null) type = "" + _ghostDataTypeProp.GetValue(gd, null);
-                    break; // first loaded ghost (selection config: later)
+                    string type = _ghostDataTypeProp != null ? ("" + _ghostDataTypeProp.GetValue(gd, null)) : "?";
+                    bool mine = (me != 0UL && GhostSteamId(g) == me);
+
+                    if (firstGhost == null) { firstGhost = g; firstLabel = mine ? "PB" : type; }
+                    if (prefGhost == null)
+                    {
+                        if (wantWr) { if (type == "Global") { prefGhost = g; prefLabel = "WR"; } }
+                        else if (mine) { prefGhost = g; prefLabel = "PB"; }
+                    }
                 }
+
+                if (prefGhost != null) { chosenGhost = prefGhost; chosenLabel = prefLabel; }
+                else if (firstGhost != null) { chosenGhost = firstGhost; chosenLabel = firstLabel + "?"; }
             }
 
             if (chosenGhost == null) { _haveGhost = false; _capturedGhost = null; return; }
@@ -511,12 +532,32 @@ namespace DeltaBar
             {
                 _capturedGhost = chosenGhost;
                 _haveGhost = true;
-                _ghostType = type;
+                _ghostType = chosenLabel;
                 _cursor = 0;
                 _needReacquire = true;
-                Logger.LogInfo(string.Format("Delta Bar: captured ghost type={0} frames={1}", type, _p.Length));
+                Logger.LogInfo(string.Format("Delta Bar: captured ghost {0} frames={1}", chosenLabel, _p.Length));
             }
             else { _haveGhost = false; }
+        }
+
+        // Local player's Steam id (Facepunch.Steamworks), guarded; 0 if unavailable.
+        private ulong LocalSteamId()
+        {
+            try { if (Steamworks.SteamClient.IsValid) return Steamworks.SteamClient.SteamId.Value; } catch { }
+            return 0UL;
+        }
+
+        // The Steam id stamped on a GTR ghost recording (V2..V5 private _steamId), 0 if absent.
+        private ulong GhostSteamId(object ghost)
+        {
+            try
+            {
+                FieldInfo f = ghost.GetType().GetField("_steamId", AllInstance);
+                if (f == null) return 0UL;
+                object v = f.GetValue(ghost);
+                return v is ulong ? (ulong)v : 0UL;
+            }
+            catch { return 0UL; }
         }
 
         private bool CaptureFrames(object ghost)

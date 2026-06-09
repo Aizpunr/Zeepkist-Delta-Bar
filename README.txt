@@ -12,6 +12,10 @@ The ghost delta is free play only. It is always disabled in online lobbies, the
 same way GTR only shows ghosts outside lobbies, so it gives no advantage in a race
 against other people.
 
+You choose which ghost to race in free play with the [Free Play] Ghost setting:
+your Personal Best or the World Record. Load that ghost in GTR and the delta
+appears against it.
+
 Each mode has its own on/off switch in Zeep Settings (or the config file), so you
 can run just the editor delta, just the free play delta, or both. Both are on by
 default.
@@ -33,8 +37,9 @@ instead, set this in BepInEx\config\com.aizpun.deltabar.cfg and relaunch:
   [Editor]
   Reference = Fastest
 
-The fastest record clears automatically when you load a different level. You can
-also clear it by hand with the F8 key (rebindable as ClearRecordKey in the config).
+The fastest record clears automatically when you load a different level. If you
+also want a manual clear, bind a key to ClearRecordKey in the config (unbound by
+default).
 
 Moving the bar
 The bar is registered with the ZeepSDK UI configurator, so you move and resize it

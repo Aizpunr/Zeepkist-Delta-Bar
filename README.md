@@ -19,7 +19,9 @@ rules.
 
 The ghost delta is free play only. It is **always disabled in online lobbies**,
 the same way GTR only shows ghosts outside lobbies, so it gives no advantage in a
-race against other people.
+race against other people. Choose which ghost to race with the `[Free Play] Ghost`
+setting (Personal Best or World Record); load that ghost in GTR and the delta
+appears against it.
 
 Each mode has its own on/off switch in Zeep Settings (or the config file), so you
 can run just the editor delta, just the free play delta, or both. Both are on by
@@ -35,8 +37,8 @@ the `Reference` setting in Zeep Settings, or in the config file:
 Reference = Fastest
 ```
 
-The fastest record clears automatically when you load a different level, and you
-can clear it by hand with the `F8` key (rebindable as `ClearRecordKey`).
+The fastest record clears automatically when you load a different level. If you
+also want a manual clear, bind a key to `ClearRecordKey` (unbound by default).
 
 ## Moving the bar
 
