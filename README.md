@@ -15,10 +15,14 @@ rules.
 
 - **Level editor:** compares your current run to a recorded trail, either your
   last run or your fastest finished run.
-- **Online lobbies:** compares to your ghost.
+- **Free play and time trial:** compares to your GTR ghost.
+
+The ghost delta is free play only. It is **always disabled in online lobbies**,
+the same way GTR only shows ghosts outside lobbies, so it gives no advantage in a
+race against other people.
 
 Each mode has its own on/off switch in Zeep Settings (or the config file), so you
-can run just the editor delta, just the online delta, or both. Both are on by
+can run just the editor delta, just the free play delta, or both. Both are on by
 default.
 
 ## Editor: last vs fastest
@@ -47,7 +51,7 @@ position is saved. By default it sits bottom centre, above the run timer. Set
 - [Level Editor Trails](https://mod.io/g/zeepkist/m/level-editor-trails) records
   the trails the editor mode compares against.
 - [Zeepkist GTR / ZeepCentraal](https://zeepki.st/) provides the ghost for the
-  online mode.
+  free play mode.
 
 ## Build
 

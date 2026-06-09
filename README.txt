@@ -6,10 +6,14 @@ the run timer. Read only, no gameplay changes.
 
 Two modes, picked automatically:
 - In the level editor test mode it compares your current run to a recorded trail.
-- In online lobbies it compares to your GTR ghost.
+- In free play and time trial it compares to your GTR ghost.
+
+The ghost delta is free play only. It is always disabled in online lobbies, the
+same way GTR only shows ghosts outside lobbies, so it gives no advantage in a race
+against other people.
 
 Each mode has its own on/off switch in Zeep Settings (or the config file), so you
-can run just the editor delta, just the online delta, or both. Both are on by
+can run just the editor delta, just the free play delta, or both. Both are on by
 default.
 
 Install
@@ -20,7 +24,7 @@ Install
 What you need installed
 - For the editor version: the "Level Editor Trails" mod. It records the trails
   this compares against, so the delta needs at least one recorded run.
-- For the online version: the GTR / ZeepCentraal mod, which provides the ghost.
+- For the free play version: the GTR / ZeepCentraal mod, which provides the ghost.
 
 Editor: last vs fastest
 By default it compares to your last run. To compare to your fastest finished run

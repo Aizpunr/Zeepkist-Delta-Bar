@@ -35,7 +35,7 @@ namespace DeltaBar
     {
         public const string PluginGuid = "com.aizpun.deltabar";
         public const string PluginName = "Delta Bar";
-        public const string PluginVersion = "0.3.0";
+        public const string PluginVersion = "0.4.0";
 
         private const string GtrGuid = "net.tnrd.zeepkist.gtr";
         private const string GhostPlayerTypeName = "TNRD.Zeepkist.GTR.Ghosting.Playback.GhostPlayer";
@@ -53,7 +53,7 @@ namespace DeltaBar
 
         // Config
         private ConfigEntry<bool> _enabled;
-        private ConfigEntry<bool> _enableOnline;   // show in online lobbies (vs GTR ghost)
+        private ConfigEntry<bool> _enableFreePlay; // show in free play/time trial (vs GTR ghost); NEVER in online lobbies
         private ConfigEntry<bool> _enableEditor;   // show in the level editor (vs a trail)
         private ConfigEntry<float> _maxDelta;      // bar saturates at this many seconds
         private ConfigEntry<bool> _debug;
@@ -134,7 +134,7 @@ namespace DeltaBar
         private void Awake()
         {
             _enabled = Config.Bind("General", "Enabled", true, "Master switch for the delta bar.");
-            _enableOnline = Config.Bind("Online", "Enabled", true, "Show the delta bar in online lobbies (vs your GTR ghost).");
+            _enableFreePlay = Config.Bind("Free Play", "Enabled", true, "Show the delta bar in free play and time trial (vs your GTR ghost). It is always disabled in online lobbies for competitive fairness, the same way GTR only shows ghosts outside lobbies.");
             _enableEditor = Config.Bind("Editor", "Enabled", true, "Show the delta bar in the level editor (vs a recorded trail).");
             _maxDelta = Config.Bind("General", "MaxDeltaSeconds", 2f, "Delta (seconds) at which the bar is fully filled.");
             _debug = Config.Bind("General", "Debug", true, "Show a small debug readout (delta, projection distance, times).");
@@ -184,7 +184,9 @@ namespace DeltaBar
                 EnsureConfiguratorRect();   // create + register the movable bar (no-op once done)
 
                 // Editor test run active (a LevelEditorTrails recorder exists) -> editor
-                // mode (reference = a recorded trail). Otherwise online mode (GTR ghost).
+                // mode (reference = a recorded trail). Otherwise GTR-ghost mode, which is
+                // FREE PLAY ONLY: hard-disabled in online lobbies for competitive fairness
+                // (mirrors GTR only showing ghosts outside lobbies).
                 float ct;
                 if (TryEditorClock(out ct))
                 {
@@ -193,10 +195,12 @@ namespace DeltaBar
                 }
                 else
                 {
-                    if (!_enableOnline.Value) { _status = "online: disabled in settings"; _show = false; return; }
+                    if (ZeepkistClient.ZeepkistNetwork.IsConnectedToGame)
+                    { _status = "online lobby: delta off (free play only)"; _show = false; return; }
+                    if (!_enableFreePlay.Value) { _status = "free play: disabled in settings"; _show = false; return; }
                     if (!EnsureGtr()) { _show = false; return; }
                     CaptureGhostIfChanged();
-                    if (!_haveGhost) { _status = "online: waiting for ghost"; _show = false; return; }
+                    if (!_haveGhost) { _status = "free play: waiting for ghost"; _show = false; return; }
                     ct = ReadCurrentTime();
                 }
 
